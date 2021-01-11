@@ -1,18 +1,16 @@
 {
-  "name": "@uniswap/v2-core",
-  "description": "🎛 Core contracts for the UniswapV2 protocol",
+  "name": "bscex-launchpoolx-contract",
+  "description": "🎛 BSCXNTS contracts for the Bscex protocol",
   "version": "1.0.1",
-  "homepage": "https://uniswap.org",
+  "homepage": "https://bscex.org",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Uniswap/uniswap-v2-core"
+    "url": "Bscex/bscex-launchpoolx-contract"
   },
   "keywords": [
-    "uniswap",
-    "ethereum",
-    "v2",
-    "core",
-    "uniswap-v2"
+    "bscex",
+    "bsc",
+    "launchPoolX"
   ],
   "files": [
     "contracts",
@@ -30,7 +28,7 @@
     "mocha": "^6.2.2",
     "prettier": "^1.19.1",
     "rimraf": "^3.0.0",
-    "solc": "0.5.16",
+    "solc": "0.6.6",
     "ts-node": "^8.5.4",
     "typescript": "^3.7.3"
   },

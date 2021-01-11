@@ -4,73 +4,9 @@ pragma solidity ^0.6.0;
 import './interfaces/IERC20.sol';
 import './libraries/SafeERC20.sol';
 import './libraries/SafeMath.sol';
+import './Ownable.sol';
 
-abstract contract Context {
-    function _msgSender() internal view virtual returns (address payable) {
-        return msg.sender;
-    }
-
-    function _msgData() internal view virtual returns (bytes memory) {
-        this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
-        return msg.data;
-    }
-}
-
-pragma solidity ^0.6.0;
-
-contract Ownable is Context {
-    address private _owner;
-
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-    /**
-     * @dev Initializes the contract setting the deployer as the initial owner.
-     */
-    constructor () internal {
-        address msgSender = _msgSender();
-        _owner = msgSender;
-        emit OwnershipTransferred(address(0), msgSender);
-    }
-
-    /**
-     * @dev Returns the address of the current owner.
-     */
-    function owner() public view returns (address) {
-        return _owner;
-    }
-
-    /**
-     * @dev Throws if called by any account other than the owner.
-     */
-    modifier onlyOwner() {
-        require(_owner == _msgSender(), "Ownable: caller is not the owner");
-        _;
-    }
-
-    /**
-     * @dev Leaves the contract without owner. It will not be possible to call
-     * `onlyOwner` functions anymore. Can only be called by the current owner.
-     *
-     * NOTE: Renouncing ownership will leave the contract without an owner,
-     * thereby removing any functionality that is only available to the owner.
-     */
-    function renounceOwnership() public virtual onlyOwner {
-        emit OwnershipTransferred(_owner, address(0));
-        _owner = address(0);
-    }
-
-    /**
-     * @dev Transfers ownership of the contract to a new account (`newOwner`).
-     * Can only be called by the current owner.
-     */
-    function transferOwnership(address newOwner) public virtual onlyOwner {
-        require(newOwner != address(0), "Ownable: new owner is the zero address");
-        emit OwnershipTransferred(_owner, newOwner);
-        _owner = newOwner;
-    }
-}
-
-contract BSCXNieuThachSanh is Ownable {
+contract BSCXNTS is Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -79,7 +15,7 @@ contract BSCXNieuThachSanh is Ownable {
         uint256 amount;     // How many LP tokens the user has provided.
         uint256 rewardDebt; // Reward debt. See explanation below.
         uint256 rewardDebtAtBlock; // the last block user stake
-        uint256 lockAmount;
+        uint256 lockAmount;  // Lock amount reward token
         uint256 lastUnlockBlock;
     }
 
@@ -93,7 +29,7 @@ contract BSCXNieuThachSanh is Ownable {
         uint256 rewardPerBlock;
         uint256 percentLockBonusReward;
         uint256 percentForDev;
-        uint256 burnPercent;
+        uint256 percentForBurn;
         uint256 finishBonusAtBlock;
         uint256 startBlock;
         uint256 totalLock;
@@ -114,8 +50,9 @@ contract BSCXNieuThachSanh is Ownable {
     mapping(uint256 => uint256[]) public rewardMultipliers;
     mapping(uint256 => uint256[]) public halvingAtBlocks;
 
-    // Total allocation poitns. Must be the sum of all allocation points in all pools.
+    // Total allocation poitns. Must be the sum of all allocation points in all pools same reward token.
     mapping(IERC20 => uint256) public totalAllocPoints;
+    // Total locks. Must be the sum of all token locks in all pools same reward token.
     mapping(IERC20 => uint256) public totalLocks;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
@@ -143,32 +80,32 @@ contract BSCXNieuThachSanh is Ownable {
         uint256 _rewardPerBlock,
         uint256 _percentLockBonusReward,
         uint256 _percentForDev,
-        uint256 _burnPercent,
+        uint256 _percentForBurn,
         uint256 _halvingAfterBlock,
-        uint256[] memory _rewardMultiplier
+        uint256[] memory _rewardMultiplier,
+        uint256 _lockFromBlock,
+        uint256 _lockToBlock
     ) public onlyOwner {
-        require(poolId1[address(_lpToken)] == 0, "BSCXNieuThachSanh::add: lp is already in pool");
-        uint256 lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
-        uint256 pid = poolInfo.length;
-        poolId1[address(_lpToken)] = pid + 1;
+        require(poolId1[address(_lpToken)] == 0, "BSCXNTS::add: lp is already in pool");
+        poolId1[address(_lpToken)] = poolInfo.length + 1;
         setAllocPoints(_rewardToken, _allocPoint);
-        uint256 finishBonusAtBlock = setHalvingAtBlocks(pid, _rewardMultiplier, _halvingAfterBlock, _startBlock);
+        uint256 finishBonusAtBlock = setHalvingAtBlocks(poolInfo.length, _rewardMultiplier, _halvingAfterBlock, _startBlock);
 
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             rewardToken: _rewardToken,
-            lastRewardBlock: lastRewardBlock,
+            lastRewardBlock: block.number > _startBlock ? block.number : _startBlock,
             allocPoint: _allocPoint,
             accRewardPerShare: 0,
             startBlock: _startBlock,
             rewardPerBlock: _rewardPerBlock,
             percentLockBonusReward: _percentLockBonusReward,
             percentForDev: _percentForDev,
-            burnPercent: _burnPercent,
+            percentForBurn: _percentForBurn,
             finishBonusAtBlock: finishBonusAtBlock,
             totalLock: 0,
-            lockFromBlock: block.number + 10512000,
-            lockToBlock: block.number + 10512000 + 10512000
+            lockFromBlock: _lockFromBlock,
+            lockToBlock: _lockToBlock
         }));
     }
 
@@ -227,9 +164,7 @@ contract BSCXNieuThachSanh is Ownable {
         }
 
         if (forDev > 0) {
-            // Mint unlocked amount for Dev
             pool.rewardToken.transfer(devaddr, forDev.mul(100 - pool.percentLockBonusReward).div(100));
-            //For more simple, I lock reward for dev if mint reward in bonus time
             farmLock(devaddr, forDev.mul(pool.percentLockBonusReward).div(100), _pid);
         }
         pool.accRewardPerShare = pool.accRewardPerShare.add(forFarmer.mul(1e12).div(lpSupply));
@@ -278,9 +213,9 @@ contract BSCXNieuThachSanh is Ownable {
             forFarmer = rewardCanAlloc;
         }
         else {
-            forBurn = amount.mul(pool.burnPercent).div(100);
+            forBurn = amount.mul(pool.percentForBurn).div(100);
             forDev = amount.mul(pool.percentForDev).div(100);
-            forFarmer = amount.mul(100 - pool.burnPercent - pool.percentForDev).div(100);
+            forFarmer = amount.mul(100 - pool.percentForBurn - pool.percentForDev).div(100);
         }
     }
 
@@ -360,9 +295,9 @@ contract BSCXNieuThachSanh is Ownable {
         }
     }
 
-    // Deposit LP tokens to BSCXNieuThachSanh.
+    // Deposit LP tokens to BSCXNTS.
     function deposit(uint256 _pid, uint256 _amount, address _referrer) public {
-        require(_amount > 0, "BSCXNieuThachSanh::deposit: amount must be greater than 0");
+        require(_amount > 0, "BSCXNTS::deposit: amount must be greater than 0");
 
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -382,11 +317,11 @@ contract BSCXNieuThachSanh is Ownable {
         emit Deposit(msg.sender, _pid, _amount);
     }
 
-    // Withdraw LP tokens from BSCXNieuThachSanh.
+    // Withdraw LP tokens from BSCXNTS.
     function withdraw(uint256 _pid, uint256 _amount) public {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
-        require(user.amount >= _amount, "BSCXNieuThachSanh::withdraw: not good");
+        require(user.amount >= _amount, "BSCXNTS::withdraw: not good");
 
         updatePool(_pid);
         _harvest(_pid);
@@ -430,9 +365,13 @@ contract BSCXNieuThachSanh is Ownable {
         }
     }
 
-    function totalLock(uint256 _pid) public view returns (uint256) {
+    function totalLockInPool(uint256 _pid) public view returns (uint256) {
         PoolInfo memory pool = poolInfo[_pid];
         return pool.totalLock;
+    }
+
+    function totalLock(IERC20 _rewardToken) public view returns (uint256) {
+        return totalLocks[_rewardToken];
     }
 
     function lockOf(address _holder, uint256 _pid) public view returns (uint256) {
