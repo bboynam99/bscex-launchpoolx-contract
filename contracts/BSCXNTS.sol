@@ -127,7 +127,7 @@ contract BSCXNTS is Ownable {
         }));
     }
 
-    function setLPTokenForStake(uint256 _poolIdForStake) public onlyOwner {
+    function setPoolIdForStake(uint256 _poolIdForStake) public onlyOwner {
         poolIdForStake = _poolIdForStake;
     }
 
