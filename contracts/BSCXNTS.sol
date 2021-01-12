@@ -88,8 +88,8 @@ contract BSCXNTS is Ownable {
     ) public onlyOwner {
         require(poolId1[address(_lpToken)] == 0, "BSCXNTS::add: lp is already in pool");
         poolId1[address(_lpToken)] = poolInfo.length + 1;
-        setAllocPoints(_rewardToken, _allocPoint);
-        uint256 finishBonusAtBlock = setHalvingAtBlocks(poolInfo.length, _rewardMultiplier, _halvingAfterBlock, _startBlock);
+        _setAllocPoints(_rewardToken, _allocPoint);
+        uint256 finishBonusAtBlock = _setHalvingAtBlocks(poolInfo.length, _rewardMultiplier, _halvingAfterBlock, _startBlock);
 
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
@@ -109,11 +109,11 @@ contract BSCXNTS is Ownable {
         }));
     }
 
-    function setAllocPoints(IERC20 _rewardToken, uint256 _allocPoint) internal onlyOwner {
+    function _setAllocPoints(IERC20 _rewardToken, uint256 _allocPoint) internal onlyOwner {
         totalAllocPoints[_rewardToken] = totalAllocPoints[_rewardToken].add(_allocPoint);
     }
 
-    function setHalvingAtBlocks(uint256 _pid, uint256[] memory _rewardMultiplier, uint256 _halvingAfterBlock, uint256 _startBlock) internal onlyOwner returns(uint256) {
+    function _setHalvingAtBlocks(uint256 _pid, uint256[] memory _rewardMultiplier, uint256 _halvingAfterBlock, uint256 _startBlock) internal onlyOwner returns(uint256) {
         rewardMultipliers[_pid] = _rewardMultiplier;
         for (uint256 i = 0; i < _rewardMultiplier.length - 1; i++) {
             uint256 halvingAtBlock = _halvingAfterBlock.mul(i + 1).add(_startBlock);
