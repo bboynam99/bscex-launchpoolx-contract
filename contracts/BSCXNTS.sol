@@ -12,33 +12,41 @@ contract BSCXNTS is Ownable {
 
     // Info of each user.
     struct UserInfo {
-        uint256 amount;     // How many LP tokens the user has provided.
-        uint256 rewardDebt; // Reward debt. See explanation below.
+        uint256 amount;            // How many LP tokens the user has provided.
+        uint256 rewardDebt;        // Reward debt. See explanation below.
         uint256 rewardDebtAtBlock; // the last block user stake
-        uint256 lockAmount;  // Lock amount reward token
+        uint256 lockAmount;        // Lock amount reward token
         uint256 lastUnlockBlock;
     }
 
     // Info of each pool.
     struct PoolInfo {
-        IERC20 lpToken;           // Address of LP token contract.
-        IERC20 rewardToken;       // Address of reward token contract.
-        uint256 allocPoint;       // How many allocation points assigned to this pool. reward to distribute per block.
-        uint256 lastRewardBlock;  // Last block number that Reward distribution occurs.
+        IERC20 lpToken;            // Address of LP token contract.
+        IERC20 rewardToken;        // Address of reward token contract.
+        uint256 allocPoint;        // How many allocation points assigned to this pool. reward to distribute per block.
+        uint256 lastRewardBlock;   // Last block number that Reward distribution occurs.
         uint256 accRewardPerShare; // Accumulated Reward per share, times 1e12. See below.
-        uint256 rewardPerBlock;
-        uint256 percentLockBonusReward;
-        uint256 percentForDev;
-        uint256 percentForBurn;
+        uint256 rewardPerBlock;    // Reward per block.
+        uint256 percentLockReward; // Percent lock reward.
+        uint256 percentForDev;     // Percent for dev team.
+        uint256 percentForBurn;    // Percent burn reward token.
         uint256 finishBonusAtBlock;
-        uint256 startBlock;
-        uint256 totalLock;
-        uint256 lockFromBlock;
-        uint256 lockToBlock;
+        uint256 startBlock;        // Start at block.
+        uint256 totalLock;         // Total lock reward token on pool.
+        uint256 lockFromBlock;     // Lock from block.
+        uint256 lockToBlock;       // Lock to block.
     }
 
     // Dev address.
     address public devaddr;
+    uint256 public poolIdForStake;  // Pool ID for get BSCX stake check conditions referrer.
+    IERC20 public bscx;             // bscx token.
+
+    uint256 public stakeBSCXLv1;    // Minimum stake BSCX condition level1 for referral program.
+    uint256 public stakeBSCXLv2;    // Minimum stake BSCX condition level2 for referral program.
+
+    uint256 public percentForReferLv1; // Percent reward level1 referral program.
+    uint256 public percentForReferLv2; // Percent reward level2 referral program.
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -62,9 +70,19 @@ contract BSCXNTS is Ownable {
     event Lock(address indexed to, uint256 value);
 
     constructor(
-        address _devaddr
+        address _devaddr,
+        IERC20 _bscx,
+        uint256 _stakeBSCXLv1,
+        uint256 _stakeBSCXLv2,
+        uint256 _percentForReferLv1,
+        uint256 _percentForReferLv2
     ) public {
         devaddr = _devaddr;
+        bscx = _bscx;
+        stakeBSCXLv1 = _stakeBSCXLv1;
+        stakeBSCXLv2 = _stakeBSCXLv2;
+        percentForReferLv1 = _percentForReferLv1;
+        percentForReferLv2 = _percentForReferLv2;
     }
 
     function poolLength() external view returns (uint256) {
@@ -78,7 +96,7 @@ contract BSCXNTS is Ownable {
         uint256 _startBlock,
         uint256 _allocPoint,
         uint256 _rewardPerBlock,
-        uint256 _percentLockBonusReward,
+        uint256 _percentLockReward,
         uint256 _percentForDev,
         uint256 _percentForBurn,
         uint256 _halvingAfterBlock,
@@ -99,7 +117,7 @@ contract BSCXNTS is Ownable {
             accRewardPerShare: 0,
             startBlock: _startBlock,
             rewardPerBlock: _rewardPerBlock,
-            percentLockBonusReward: _percentLockBonusReward,
+            percentLockReward: _percentLockReward,
             percentForDev: _percentForDev,
             percentForBurn: _percentForBurn,
             finishBonusAtBlock: finishBonusAtBlock,
@@ -107,6 +125,10 @@ contract BSCXNTS is Ownable {
             lockFromBlock: _lockFromBlock,
             lockToBlock: _lockToBlock
         }));
+    }
+
+    function setLPTokenForStake(uint256 _poolIdForStake) public onlyOwner {
+        poolIdForStake = _poolIdForStake;
     }
 
     function _setAllocPoints(IERC20 _rewardToken, uint256 _allocPoint) internal onlyOwner {
@@ -122,6 +144,16 @@ contract BSCXNTS is Ownable {
         uint256 finishBonusAtBlock = _halvingAfterBlock.mul(_rewardMultiplier.length - 1).add(_startBlock);
         halvingAtBlocks[_pid].push(uint256(-1));
         return finishBonusAtBlock;
+    }
+
+    function setReferStakeBSCX(uint256 _stakeBSCXLv1, uint256 _stakeBSCXLv2) public onlyOwner {
+        stakeBSCXLv1 = _stakeBSCXLv1;
+        stakeBSCXLv2 = _stakeBSCXLv2;
+    }
+
+    function setPercentRefer(uint256 _percentForReferLv1, uint256 _percentForReferLv2) public onlyOwner {
+        percentForReferLv1 = _percentForReferLv1;
+        percentForReferLv2 = _percentForReferLv2;
     }
 
     // Update the given pool's BSCX allocation point. Can only be called by the owner.
@@ -164,8 +196,8 @@ contract BSCXNTS is Ownable {
         }
 
         if (forDev > 0) {
-            pool.rewardToken.transfer(devaddr, forDev.mul(100 - pool.percentLockBonusReward).div(100));
-            farmLock(devaddr, forDev.mul(pool.percentLockBonusReward).div(100), _pid);
+            pool.rewardToken.transfer(devaddr, forDev.mul(100 - pool.percentLockReward).div(100));
+            farmLock(devaddr, forDev.mul(pool.percentLockReward).div(100), _pid);
         }
         pool.accRewardPerShare = pool.accRewardPerShare.add(forFarmer.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number;
@@ -214,8 +246,8 @@ contract BSCXNTS is Ownable {
         }
         else {
             forBurn = amount.mul(pool.percentForBurn).div(100);
-            forDev = amount.mul(pool.percentForDev).div(100);
-            forFarmer = amount.mul(100 - pool.percentForBurn - pool.percentForDev).div(100);
+            forDev = amount.sub(forBurn).mul(pool.percentForDev).div(100);
+            forFarmer = amount.sub(forBurn).sub(forDev);
         }
     }
 
@@ -253,37 +285,37 @@ contract BSCXNTS is Ownable {
             }
 
             if(pending > 0) {
-                uint256 referAmountLv1 = pending.mul(5).div(100);
-                uint256 referAmountLv2 = pending.mul(3).div(100);
-                uint256 referAmountLv3 = pending.mul(2).div(100);
+                uint256 referAmountLv1 = pending.mul(percentForReferLv1).div(100);
+                uint256 referAmountLv2 = pending.mul(percentForReferLv2).div(100);
                 address referrerLv1 = referrers[address(msg.sender)];
                 uint256 referAmountForDev = 0;
 
                 if (referrerLv1 != address(0)) {
-                    pool.rewardToken.transfer(referrerLv1, referAmountLv1);
-                    address referrerLv2 = referrers[referrerLv1];
-
-                    if (referrerLv2 != address(0)) {
-                        pool.rewardToken.transfer(referrerLv2, referAmountLv2);
-                        address referrerLv3 = referrers[referrerLv2];
-
-                        if (referrerLv3 != address(0)) {
-                            pool.rewardToken.transfer(referrerLv3, referAmountLv3);
-                        }
+                    uint256 bscxStaked = getBSCXStaked(referrerLv1);
+                    if (bscxStaked >= stakeBSCXLv1) {
+                        pool.rewardToken.transfer(referrerLv1, referAmountLv1);
                     } else {
-                        referAmountForDev = referAmountLv2.add(referAmountLv3);
+                        referAmountForDev = referAmountLv1.add(referAmountLv2);
+                    }
+
+                    address referrerLv2 = referrers[referrerLv1];
+                    uint256 bscxStaked2 = getBSCXStaked(referrerLv2);
+                    if (referrerLv2 != address(0) && bscxStaked2 >= stakeBSCXLv2) {
+                        pool.rewardToken.transfer(referrerLv2, referAmountLv2);
+                    } else {
+                        referAmountForDev = referAmountLv2;
                     }
                 } else {
-                    referAmountForDev = referAmountLv1.add(referAmountLv2).add(referAmountLv3);
+                    referAmountForDev = referAmountLv1.add(referAmountLv2);
                 }
 
                 if (referAmountForDev > 0) {
                     pool.rewardToken.transfer(devaddr, referAmountForDev);
                 }
 
-                uint256 amount = pending.sub(referAmountLv1).sub(referAmountLv2).sub(referAmountLv3);
-                pool.rewardToken.transfer(msg.sender, amount.mul(100 - pool.percentLockBonusReward).div(100));
-                uint256 lockAmount = amount.mul(pool.percentLockBonusReward).div(100);
+                uint256 amount = pending.sub(referAmountLv1).sub(referAmountLv2);
+                pool.rewardToken.transfer(msg.sender, amount.mul(100 - pool.percentLockReward).div(100));
+                uint256 lockAmount = amount.mul(pool.percentLockReward).div(100);
                 farmLock(msg.sender, lockAmount, _pid);
 
                 user.rewardDebtAtBlock = block.number;
@@ -434,5 +466,17 @@ contract BSCXNTS is Ownable {
         user.lastUnlockBlock = block.number;
         pool.totalLock = pool.totalLock.sub(amount);
         totalLocks[pool.rewardToken] = totalLocks[pool.rewardToken].sub(amount);
+    }
+
+    function getBSCXStaked(address _account) public view returns (uint256) {
+        PoolInfo memory poolForStake = poolInfo[poolIdForStake];
+        UserInfo memory user = userInfo[poolIdForStake][_account];
+
+        uint256 totalBSCXStaked = bscx.balanceOf(address(poolForStake.lpToken));
+        uint256 totalStake = poolForStake.lpToken.balanceOf(address(this));
+        uint256 stakedBalance = user.amount;
+
+        uint256 bscxStaked = totalBSCXStaked.mul(stakedBalance).div(totalStake);
+        return bscxStaked;
     }
 }
