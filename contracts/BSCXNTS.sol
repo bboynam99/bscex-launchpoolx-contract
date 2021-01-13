@@ -39,11 +39,11 @@ contract BSCXNTS is Ownable {
 
     // Dev address.
     address public devaddr;
+    bool public status;             // Status handle farmer can harvest.
     uint256 public poolIdForStake;  // Pool ID for get BSCX stake check conditions referrer.
-    IERC20 public bscx;             // bscx token.
 
-    uint256 public stakeBSCXLv1;    // Minimum stake BSCX condition level1 for referral program.
-    uint256 public stakeBSCXLv2;    // Minimum stake BSCX condition level2 for referral program.
+    uint256 public stakeLPLv1;    // Minimum stake LP token condition level1 for referral program.
+    uint256 public stakeLPLv2;    // Minimum stake LP token condition level2 for referral program.
 
     uint256 public percentForReferLv1; // Percent reward level1 referral program.
     uint256 public percentForReferLv2; // Percent reward level2 referral program.
@@ -57,6 +57,7 @@ contract BSCXNTS is Ownable {
 
     mapping(uint256 => uint256[]) public rewardMultipliers;
     mapping(uint256 => uint256[]) public halvingAtBlocks;
+    mapping(uint256 => address) public teamAddresses; // Set address receive reward for project team IDO
 
     // Total allocation poitns. Must be the sum of all allocation points in all pools same reward token.
     mapping(IERC20 => uint256) public totalAllocPoints;
@@ -71,18 +72,18 @@ contract BSCXNTS is Ownable {
 
     constructor(
         address _devaddr,
-        IERC20 _bscx,
-        uint256 _stakeBSCXLv1,
-        uint256 _stakeBSCXLv2,
+        uint256 _stakeLPLv1,
+        uint256 _stakeLPLv2,
         uint256 _percentForReferLv1,
         uint256 _percentForReferLv2
     ) public {
         devaddr = _devaddr;
-        bscx = _bscx;
-        stakeBSCXLv1 = _stakeBSCXLv1;
-        stakeBSCXLv2 = _stakeBSCXLv2;
+        stakeLPLv1 = _stakeLPLv1;
+        stakeLPLv2 = _stakeLPLv2;
         percentForReferLv1 = _percentForReferLv1;
         percentForReferLv2 = _percentForReferLv2;
+
+        status = true;
     }
 
     function poolLength() external view returns (uint256) {
@@ -127,8 +128,18 @@ contract BSCXNTS is Ownable {
         }));
     }
 
+    function setStatus(bool _status) public onlyOwner {
+        status = _status;
+    }
+
+    // Import for get reward referral program
     function setPoolIdForStake(uint256 _poolIdForStake) public onlyOwner {
         poolIdForStake = _poolIdForStake;
+    }
+
+    // Set team address receive reward
+    function setTeamAddressPool(uint256 _pid, address _teamAddress) public onlyOwner {
+        teamAddresses[_pid] = _teamAddress;
     }
 
     function _setAllocPoints(IERC20 _rewardToken, uint256 _allocPoint) internal onlyOwner {
@@ -146,9 +157,9 @@ contract BSCXNTS is Ownable {
         return finishBonusAtBlock;
     }
 
-    function setReferStakeBSCX(uint256 _stakeBSCXLv1, uint256 _stakeBSCXLv2) public onlyOwner {
-        stakeBSCXLv1 = _stakeBSCXLv1;
-        stakeBSCXLv2 = _stakeBSCXLv2;
+    function setReferStakeBSCX(uint256 _stakeLPLv1, uint256 _stakeLPLv2) public onlyOwner {
+        stakeLPLv1 = _stakeLPLv1;
+        stakeLPLv2 = _stakeLPLv2;
     }
 
     function setPercentRefer(uint256 _percentForReferLv1, uint256 _percentForReferLv2) public onlyOwner {
@@ -196,8 +207,13 @@ contract BSCXNTS is Ownable {
         }
 
         if (forDev > 0) {
-            pool.rewardToken.transfer(devaddr, forDev.mul(100 - pool.percentLockReward).div(100));
-            farmLock(devaddr, forDev.mul(pool.percentLockReward).div(100), _pid);
+            if (teamAddresses[_pid] != address(0)) {
+                pool.rewardToken.transfer(teamAddresses[_pid], forDev.mul(100 - pool.percentLockReward).div(100));
+                farmLock(teamAddresses[_pid], forDev.mul(pool.percentLockReward).div(100), _pid);
+            } else {
+                pool.rewardToken.transfer(devaddr, forDev.mul(100 - pool.percentLockReward).div(100));
+                farmLock(devaddr, forDev.mul(pool.percentLockReward).div(100), _pid);
+            }
         }
         pool.accRewardPerShare = pool.accRewardPerShare.add(forFarmer.mul(1e12).div(lpSupply));
         pool.lastRewardBlock = block.number;
@@ -267,8 +283,14 @@ contract BSCXNTS is Ownable {
     }
 
     function claimReward(uint256 _pid) public {
+        require(status == true, "BSCXNTS::withdraw: can not claim reward");
         updatePool(_pid);
         _harvest(_pid);
+    }
+
+    function getLPTokenStaked(address _account) public view returns (uint256) {
+        UserInfo memory user = userInfo[poolIdForStake][_account];
+        return user.amount;
     }
 
     // lock 75% of reward if it come from bounus time
@@ -291,16 +313,16 @@ contract BSCXNTS is Ownable {
                 uint256 referAmountForDev = 0;
 
                 if (referrerLv1 != address(0)) {
-                    uint256 bscxStaked = getBSCXStaked(referrerLv1);
-                    if (bscxStaked >= stakeBSCXLv1) {
+                    uint256 lpStaked = getLPTokenStaked(referrerLv1);
+                    if (lpStaked >= stakeLPLv1) {
                         pool.rewardToken.transfer(referrerLv1, referAmountLv1);
                     } else {
                         referAmountForDev = referAmountLv1.add(referAmountLv2);
                     }
 
                     address referrerLv2 = referrers[referrerLv1];
-                    uint256 bscxStaked2 = getBSCXStaked(referrerLv2);
-                    if (referrerLv2 != address(0) && bscxStaked2 >= stakeBSCXLv2) {
+                    uint256 lpStaked2 = getLPTokenStaked(referrerLv2);
+                    if (referrerLv2 != address(0) && lpStaked2 >= stakeLPLv2) {
                         pool.rewardToken.transfer(referrerLv2, referAmountLv2);
                     } else {
                         referAmountForDev = referAmountLv2;
@@ -351,6 +373,7 @@ contract BSCXNTS is Ownable {
 
     // Withdraw LP tokens from BSCXNTS.
     function withdraw(uint256 _pid, uint256 _amount) public {
+        require(status == true, "BSCXNTS::withdraw: can not withdraw");
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "BSCXNTS::withdraw: not good");
@@ -466,17 +489,5 @@ contract BSCXNTS is Ownable {
         user.lastUnlockBlock = block.number;
         pool.totalLock = pool.totalLock.sub(amount);
         totalLocks[pool.rewardToken] = totalLocks[pool.rewardToken].sub(amount);
-    }
-
-    function getBSCXStaked(address _account) public view returns (uint256) {
-        PoolInfo memory poolForStake = poolInfo[poolIdForStake];
-        UserInfo memory user = userInfo[poolIdForStake][_account];
-
-        uint256 totalBSCXStaked = bscx.balanceOf(address(poolForStake.lpToken));
-        uint256 totalStake = poolForStake.lpToken.balanceOf(address(this));
-        uint256 stakedBalance = user.amount;
-
-        uint256 bscxStaked = totalBSCXStaked.mul(stakedBalance).div(totalStake);
-        return bscxStaked;
     }
 }
