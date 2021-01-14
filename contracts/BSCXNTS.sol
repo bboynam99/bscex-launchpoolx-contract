@@ -133,7 +133,7 @@ contract BSCXNTS is Ownable {
     }
 
     // Import for get reward referral program
-    function setPoolIdForStake(uint256 _poolIdForStake) public onlyOwner {
+    function setPoolIdForStakeLP(uint256 _poolIdForStake) public onlyOwner {
         poolIdForStake = _poolIdForStake;
     }
 
@@ -157,12 +157,12 @@ contract BSCXNTS is Ownable {
         return finishBonusAtBlock;
     }
 
-    function setReferStakeBSCX(uint256 _stakeLPLv1, uint256 _stakeLPLv2) public onlyOwner {
+    function setAmountLPStakeLevelRefer(uint256 _stakeLPLv1, uint256 _stakeLPLv2) public onlyOwner {
         stakeLPLv1 = _stakeLPLv1;
         stakeLPLv2 = _stakeLPLv2;
     }
 
-    function setPercentRefer(uint256 _percentForReferLv1, uint256 _percentForReferLv2) public onlyOwner {
+    function setPercentLPLevelRefer(uint256 _percentForReferLv1, uint256 _percentForReferLv2) public onlyOwner {
         percentForReferLv1 = _percentForReferLv1;
         percentForReferLv2 = _percentForReferLv2;
     }
@@ -444,7 +444,7 @@ contract BSCXNTS is Ownable {
     function farmLock(address _holder, uint256 _amount, uint256 _pid) internal {
         require(_holder != address(0), "ERC20: lock to the zero address");
         PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
+        UserInfo storage user = userInfo[_pid][_holder];
 
         require(_amount <= pool.rewardToken.balanceOf(address(this)), "ERC20: lock amount over blance");
         user.lockAmount = user.lockAmount.add(_amount);
