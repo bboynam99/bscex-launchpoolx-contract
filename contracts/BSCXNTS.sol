@@ -364,7 +364,7 @@ contract BSCXNTS is Ownable {
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);
 
-        if (referrers[address(msg.sender)] == address(0) && _referrer != address(0)) {
+        if (referrers[address(msg.sender)] == address(0) && _referrer != address(0) && _referrer != address(msg.sender)) {
             referrers[address(msg.sender)] = address(_referrer);
         }
 
