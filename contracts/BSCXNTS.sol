@@ -40,7 +40,7 @@ contract BSCXNTS is Ownable {
     // Dev address.
     address public devaddr;
     bool public status;             // Status handle farmer can harvest.
-    uint256 public poolIdForStake;  // Pool ID for get BSCX stake check conditions referrer.
+    IERC20 public referralLPToken;  // LP token for check referral program
 
     uint256 public stakeAmountLPLv1;    // Minimum stake LP token condition level1 for referral program.
     uint256 public stakeAmountLPLv2;    // Minimum stake LP token condition level2 for referral program.
@@ -75,13 +75,15 @@ contract BSCXNTS is Ownable {
         uint256 _stakeAmountLPLv1,
         uint256 _stakeAmountLPLv2,
         uint256 _percentForReferLv1,
-        uint256 _percentForReferLv2
+        uint256 _percentForReferLv2,
+        IERC20 _referralLPToken
     ) public {
         devaddr = _devaddr;
         stakeAmountLPLv1 = _stakeAmountLPLv1;
         stakeAmountLPLv2 = _stakeAmountLPLv2;
         percentForReferLv1 = _percentForReferLv1;
         percentForReferLv2 = _percentForReferLv2;
+        referralLPToken = _referralLPToken;
 
         status = true;
     }
@@ -109,6 +111,7 @@ contract BSCXNTS is Ownable {
         poolId1[address(_lpToken)] = poolInfo.length + 1;
         _setAllocPoints(_rewardToken, _allocPoint);
         uint256 finishBonusAtBlock = _setHalvingAtBlocks(poolInfo.length, _rewardMultiplier, _halvingAfterBlock, _startBlock);
+        teamAddresses[poolInfo.length] = devaddr;
 
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
@@ -128,20 +131,6 @@ contract BSCXNTS is Ownable {
         }));
     }
 
-    function setStatus(bool _status) public onlyOwner {
-        status = _status;
-    }
-
-    // Import for get reward referral program
-    function setPoolIdForStakeLP(uint256 _poolIdForStake) public onlyOwner {
-        poolIdForStake = _poolIdForStake;
-    }
-
-    // Set team address receive reward
-    function setTeamAddressPool(uint256 _pid, address _teamAddress) public onlyOwner {
-        teamAddresses[_pid] = _teamAddress;
-    }
-
     function _setAllocPoints(IERC20 _rewardToken, uint256 _allocPoint) internal onlyOwner {
         totalAllocPoints[_rewardToken] = totalAllocPoints[_rewardToken].add(_allocPoint);
     }
@@ -155,6 +144,20 @@ contract BSCXNTS is Ownable {
         uint256 finishBonusAtBlock = _halvingAfterBlock.mul(_rewardMultiplier.length - 1).add(_startBlock);
         halvingAtBlocks[_pid].push(uint256(-1));
         return finishBonusAtBlock;
+    }
+
+    function setStatus(bool _status) public onlyOwner {
+        status = _status;
+    }
+
+    function setReferralLPToken(IERC20 _referralLPToken) public onlyOwner {
+        referralLPToken = _referralLPToken;
+    }
+
+    // Set team address receive reward
+    function setTeamAddressPool(uint256 _pid, address _teamAddress) public {
+        require(msg.sender == teamAddresses[_pid], "dev: wut?");
+        teamAddresses[_pid] = _teamAddress;
     }
 
     function setAmountLPStakeLevelRefer(uint256 _stakeAmountLPLv1, uint256 _stakeAmountLPLv2) public onlyOwner {
@@ -288,11 +291,6 @@ contract BSCXNTS is Ownable {
         _harvest(_pid);
     }
 
-    function getLPTokenStaked(address _account) public view returns (uint256) {
-        UserInfo memory user = userInfo[poolIdForStake][_account];
-        return user.amount;
-    }
-
     // lock 75% of reward if it come from bounus time
     function _harvest(uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
@@ -309,31 +307,7 @@ contract BSCXNTS is Ownable {
             if(pending > 0) {
                 uint256 referAmountLv1 = pending.mul(percentForReferLv1).div(100);
                 uint256 referAmountLv2 = pending.mul(percentForReferLv2).div(100);
-                address referrerLv1 = referrers[address(msg.sender)];
-                uint256 referAmountForDev = 0;
-
-                if (referrerLv1 != address(0)) {
-                    uint256 lpStaked = getLPTokenStaked(referrerLv1);
-                    if (lpStaked >= stakeAmountLPLv1) {
-                        pool.rewardToken.transfer(referrerLv1, referAmountLv1);
-                    } else {
-                        referAmountForDev = referAmountLv1.add(referAmountLv2);
-                    }
-
-                    address referrerLv2 = referrers[referrerLv1];
-                    uint256 lpStaked2 = getLPTokenStaked(referrerLv2);
-                    if (referrerLv2 != address(0) && lpStaked2 >= stakeAmountLPLv2) {
-                        pool.rewardToken.transfer(referrerLv2, referAmountLv2);
-                    } else {
-                        referAmountForDev = referAmountLv2;
-                    }
-                } else {
-                    referAmountForDev = referAmountLv1.add(referAmountLv2);
-                }
-
-                if (referAmountForDev > 0) {
-                    pool.rewardToken.transfer(devaddr, referAmountForDev);
-                }
+                _transferReferral(_pid, referAmountLv1, referAmountLv2);
 
                 uint256 amount = pending.sub(referAmountLv1).sub(referAmountLv2);
                 pool.rewardToken.transfer(msg.sender, amount.mul(100 - pool.percentLockReward).div(100));
@@ -346,6 +320,41 @@ contract BSCXNTS is Ownable {
             }
 
             user.rewardDebt = user.amount.mul(pool.accRewardPerShare).div(1e12);
+        }
+    }
+
+    function _transferReferral(uint256 _pid, uint256 _referAmountLv1, uint256 _referAmountLv2) internal {
+        PoolInfo storage pool = poolInfo[_pid];
+        address referrerLv1 = referrers[address(msg.sender)];
+        uint256 referAmountForDev = 0;
+
+        if (referrerLv1 != address(0)) {
+            uint256 lpStaked = referralLPToken.balanceOf(referrerLv1);
+            if (lpStaked >= stakeAmountLPLv1) {
+                pool.rewardToken.transfer(referrerLv1, _referAmountLv1.mul(100 - pool.percentLockReward).div(100));
+                uint256 lockAmount = _referAmountLv1.mul(pool.percentLockReward).div(100);
+                farmLock(referrerLv1, lockAmount, _pid);
+            } else {
+                referAmountForDev = _referAmountLv1.add(_referAmountLv2);
+            }
+
+            address referrerLv2 = referrers[referrerLv1];
+            uint256 lpStaked2 = referralLPToken.balanceOf(referrerLv2);
+            if (referrerLv2 != address(0) && lpStaked2 >= stakeAmountLPLv2) {
+                pool.rewardToken.transfer(referrerLv2, _referAmountLv2.mul(100 - pool.percentLockReward).div(100));
+                uint256 lockAmount = _referAmountLv1.mul(pool.percentLockReward).div(100);
+                farmLock(referrerLv2, lockAmount, _pid);
+            } else {
+                referAmountForDev = _referAmountLv2;
+            }
+        } else {
+            referAmountForDev = _referAmountLv1.add(_referAmountLv2);
+        }
+
+        if (referAmountForDev > 0) {
+            pool.rewardToken.transfer(devaddr, referAmountForDev.mul(100 - pool.percentLockReward).div(100));
+            uint256 lockAmount = referAmountForDev.mul(pool.percentLockReward).div(100);
+            farmLock(devaddr, lockAmount, _pid);
         }
     }
 
