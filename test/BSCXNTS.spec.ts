@@ -115,4 +115,30 @@ describe('BSCXNTS', () => {
     totalAllocPointPOOL2 = totalAllocPointPOOL2.toNumber()
     await expect(totalAllocPointPOOL1 + totalAllocPointPOOL2).to.eq(100)
   })
+
+  it('set status contract', async () => {
+    await nieuTS.setStatus(false)
+    const status = await nieuTS.status()
+    expect(status).to.eq(false)
+  })
+
+  it('set pool Id for stake LP token handle referral', async () => {
+    await nieuTS.setPoolIdForStakeLP(1)
+    const poolIdForStake = await nieuTS.poolIdForStake()
+    expect(poolIdForStake).to.eq(1)
+  })
+
+  it('set team address receive reward from farm pool', async () => {
+    await nieuTS.setTeamAddressPool(1, wallet.address)
+    const teamAddress = await nieuTS.teamAddresses(1)
+    expect(teamAddress).to.eq(wallet.address)
+  })
+
+  it('set team address receive reward from farm pool', async () => {
+    await nieuTS.setAmountLPStakeLevelRefer(1, 2)
+    const stakeAmountLPLv1 = await nieuTS.stakeAmountLPLv1()
+    const stakeAmountLPLv2 = await nieuTS.stakeAmountLPLv2()
+    expect(stakeAmountLPLv1).to.eq(1)
+    expect(stakeAmountLPLv2).to.eq(2)
+  })
 })

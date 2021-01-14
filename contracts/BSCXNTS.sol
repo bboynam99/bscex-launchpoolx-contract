@@ -42,8 +42,8 @@ contract BSCXNTS is Ownable {
     bool public status;             // Status handle farmer can harvest.
     uint256 public poolIdForStake;  // Pool ID for get BSCX stake check conditions referrer.
 
-    uint256 public stakeLPLv1;    // Minimum stake LP token condition level1 for referral program.
-    uint256 public stakeLPLv2;    // Minimum stake LP token condition level2 for referral program.
+    uint256 public stakeAmountLPLv1;    // Minimum stake LP token condition level1 for referral program.
+    uint256 public stakeAmountLPLv2;    // Minimum stake LP token condition level2 for referral program.
 
     uint256 public percentForReferLv1; // Percent reward level1 referral program.
     uint256 public percentForReferLv2; // Percent reward level2 referral program.
@@ -72,14 +72,14 @@ contract BSCXNTS is Ownable {
 
     constructor(
         address _devaddr,
-        uint256 _stakeLPLv1,
-        uint256 _stakeLPLv2,
+        uint256 _stakeAmountLPLv1,
+        uint256 _stakeAmountLPLv2,
         uint256 _percentForReferLv1,
         uint256 _percentForReferLv2
     ) public {
         devaddr = _devaddr;
-        stakeLPLv1 = _stakeLPLv1;
-        stakeLPLv2 = _stakeLPLv2;
+        stakeAmountLPLv1 = _stakeAmountLPLv1;
+        stakeAmountLPLv2 = _stakeAmountLPLv2;
         percentForReferLv1 = _percentForReferLv1;
         percentForReferLv2 = _percentForReferLv2;
 
@@ -157,9 +157,9 @@ contract BSCXNTS is Ownable {
         return finishBonusAtBlock;
     }
 
-    function setAmountLPStakeLevelRefer(uint256 _stakeLPLv1, uint256 _stakeLPLv2) public onlyOwner {
-        stakeLPLv1 = _stakeLPLv1;
-        stakeLPLv2 = _stakeLPLv2;
+    function setAmountLPStakeLevelRefer(uint256 _stakeAmountLPLv1, uint256 _stakeAmountLPLv2) public onlyOwner {
+        stakeAmountLPLv1 = _stakeAmountLPLv1;
+        stakeAmountLPLv2 = _stakeAmountLPLv2;
     }
 
     function setPercentLPLevelRefer(uint256 _percentForReferLv1, uint256 _percentForReferLv2) public onlyOwner {
@@ -314,7 +314,7 @@ contract BSCXNTS is Ownable {
 
                 if (referrerLv1 != address(0)) {
                     uint256 lpStaked = getLPTokenStaked(referrerLv1);
-                    if (lpStaked >= stakeLPLv1) {
+                    if (lpStaked >= stakeAmountLPLv1) {
                         pool.rewardToken.transfer(referrerLv1, referAmountLv1);
                     } else {
                         referAmountForDev = referAmountLv1.add(referAmountLv2);
@@ -322,7 +322,7 @@ contract BSCXNTS is Ownable {
 
                     address referrerLv2 = referrers[referrerLv1];
                     uint256 lpStaked2 = getLPTokenStaked(referrerLv2);
-                    if (referrerLv2 != address(0) && lpStaked2 >= stakeLPLv2) {
+                    if (referrerLv2 != address(0) && lpStaked2 >= stakeAmountLPLv2) {
                         pool.rewardToken.transfer(referrerLv2, referAmountLv2);
                     } else {
                         referAmountForDev = referAmountLv2;
